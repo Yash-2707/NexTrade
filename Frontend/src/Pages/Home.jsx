@@ -1,26 +1,31 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import { ArrowRight, Sparkles } from "lucide-react";
+import api from "../api/axios"; // ✅ Use centralized API
 
 // Components
-import Navbar from "../Component/Navbar";
-import Footer from "../Component/Footer";
-import Hero from "../Component/HomeComponents/Hero";
-import ProductCard from "../Component/HomeComponents/ProductCard";
-import HomeCategories from "../Component/HomeComponents/HomeCategories"; // ✅ Import the new component
+import Hero from "../Component/Hero";
+import HomeCategories from "../Component/HomeCategories";
+import ProductCard from "../Component/ProductCard";
 
 const Home = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch Products for "Fresh Recommendations"
+  // Fetch Products
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/api/products");
-        setProducts(res.data);
+        const res = await api.get("/products");
+
+        // ✅ Client-side sorting: Ensure we show the NEWEST items first
+        const sortedProducts = res.data.sort((a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        setProducts(sortedProducts);
       } catch (error) {
-        console.error("Error fetching products", error);
+        console.error("Error fetching products:", error);
       } finally {
         setLoading(false);
       }
@@ -30,61 +35,64 @@ const Home = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-slate-900">
-      <Navbar />
+    <div className="min-h-screen bg-white font-sans text-slate-900">
+
+      {/* 1. Hero Section */}
       <Hero />
 
-      {/* ✅ 1. Dynamic Categories Section */}
-      {/* This component now handles fetching and displaying categories automatically */}
+      {/* 2. Dynamic Categories */}
       <HomeCategories />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-        
-        {/* ✅ 2. Fresh Recommendations Section */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 space-y-20">
+
+        {/* 3. Fresh Recommendations Section */}
         <section>
-          <div className="flex justify-between items-end mb-6">
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-end mb-8 gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">Fresh Recommendations</h2>
-              <p className="text-slate-500 text-sm mt-1">New items just added by sellers</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="text-yellow-500" size={20} fill="currentColor" />
+                <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900">Fresh Recommendations</h2>
+              </div>
+              <p className="text-slate-500 text-sm">The latest items just added by your community.</p>
             </div>
-            
+
             <Link
               to="/productlist"
-              className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+              className="group flex items-center text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors"
             >
-              View all products &rarr;
+              View all products
+              <ArrowRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
 
+          {/* Content */}
           {loading ? (
-            // Loading Skeleton for Products
+            // Skeleton Loader (Matches ProductCard dimensions)
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {[1, 2, 3, 4].map((n) => (
-                <div key={n} className="bg-white rounded-xl h-80 animate-pulse border border-gray-100">
-                   <div className="h-48 bg-gray-200 rounded-t-xl w-full"></div>
-                   <div className="p-4 space-y-3">
-                     <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                     <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                   </div>
-                </div>
+              {[...Array(8)].map((_, n) => (
+                <div key={n} className="bg-gray-100 rounded-2xl h-[340px] animate-pulse"></div>
+              ))}
+            </div>
+          ) : products.length > 0 ? (
+            // Product Grid (Top 8 Newest)
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {products.slice(0, 8).map((p) => (
+                <ProductCard key={p._id} product={p} />
               ))}
             </div>
           ) : (
-            // Product Grid
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {/* Slice to show only the 8 most recent products */}
-              {products.slice(0, 8).map((p) => (
-                // Assuming ProductCard handles its own internal Link or onClick. 
-                // If not, wrap it in <Link to={`/product/${p._id}`}> ... </Link>
-                <ProductCard key={p._id} product={p} />
-              ))}
+            // Empty State
+            <div className="text-center py-20 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+              <p className="text-slate-400 text-lg">No products available yet.</p>
+              <Link to="/addproduct" className="text-blue-600 font-bold hover:underline mt-2 inline-block">
+                Be the first to sell!
+              </Link>
             </div>
           )}
         </section>
 
       </main>
-
-      <Footer />
     </div>
   );
 };

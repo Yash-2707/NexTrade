@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import api from '../api/axios'; // ✅ Use centralized API
 import {
   Heart,
   Share2,
@@ -9,49 +10,52 @@ import {
   MessageSquare,
   ShieldAlert,
   MoreVertical,
-  ChevronRight
+  ChevronRight,
+  AlertCircle
 } from 'lucide-react';
-import Navbar from '../Component/Navbar';
 
 // --- Sub-Components ---
 
 const Breadcrumbs = ({ title }) => (
-  <div className="flex items-center text-sm text-slate-500 mb-6 overflow-x-auto whitespace-nowrap">
-    <a href="/" className="hover:text-blue-600">Home</a>
+  <nav className="flex items-center text-sm text-slate-500 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
+    <Link to="/" className="hover:text-blue-600 transition-colors">Home</Link>
     <ChevronRight size={16} className="mx-2 text-slate-400 flex-shrink-0" />
-    <a href="#" className="hover:text-blue-600">Products</a>
+    <Link to="/productlist" className="hover:text-blue-600 transition-colors">Products</Link>
     <ChevronRight size={16} className="mx-2 text-slate-400 flex-shrink-0" />
-    <span className="text-slate-800 font-medium truncate">{title || "Product"}</span>
-  </div>
+    <span className="text-slate-900 font-medium truncate">{title || "Product"}</span>
+  </nav>
 );
 
 const ImageGallery = ({ images, isFeatured }) => {
   const [selectedImage, setSelectedImage] = useState(0);
 
-  // Guard clause if images are missing
-  if (!images || images.length === 0) return <div className="bg-gray-200 h-96 rounded-xl flex items-center justify-center">No Images</div>;
+  if (!images || images.length === 0) return (
+    <div className="bg-gray-100 h-96 rounded-2xl flex items-center justify-center text-slate-400">
+      No Images Available
+    </div>
+  );
 
   return (
     <div className="space-y-4">
       {/* Main Large Image */}
-      <div className="relative bg-gray-100 rounded-xl overflow-hidden aspect-[4/3] border border-gray-200">
+      <div className="relative bg-white rounded-2xl overflow-hidden aspect-[4/3] border border-gray-100 shadow-sm group">
         <img
           src={images[selectedImage]}
           alt="Product Main"
-          className="w-full h-full object-contain object-center"
+          className="w-full h-full object-contain object-center transition-transform duration-500 group-hover:scale-105"
         />
 
-        {/* Tags & Actions over image */}
         {isFeatured && (
-          <span className="absolute top-4 left-4 bg-white text-slate-900 text-xs font-bold px-3 py-1.5 rounded-full uppercase shadow-sm">
+          <span className="absolute top-4 left-4 bg-yellow-400 text-slate-900 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
             Featured
           </span>
         )}
-        <div className="absolute bottom-4 right-4 flex gap-3">
-          <button className="bg-white p-2.5 rounded-full shadow-md text-slate-700 hover:text-red-500 transition-colors">
+        
+        <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button className="bg-white p-2.5 rounded-full shadow-lg text-slate-700 hover:text-red-500 hover:bg-red-50 transition-colors">
             <Heart size={20} />
           </button>
-          <button className="bg-white p-2.5 rounded-full shadow-md text-slate-700 hover:text-blue-600 transition-colors">
+          <button className="bg-white p-2.5 rounded-full shadow-lg text-slate-700 hover:text-blue-600 hover:bg-blue-50 transition-colors">
             <Share2 size={20} />
           </button>
         </div>
@@ -59,23 +63,18 @@ const ImageGallery = ({ images, isFeatured }) => {
 
       {/* Thumbnail List */}
       {images.length > 1 && (
-        <div className="grid grid-cols-4 gap-4">
-          {images.slice(0, 3).map((img, index) => (
+        <div className="grid grid-cols-5 gap-3">
+          {images.map((img, index) => (
             <div
               key={index}
               onClick={() => setSelectedImage(index)}
-              className={`relative rounded-lg overflow-hidden bg-gray-100 aspect-square cursor-pointer border-2 transition-all ${selectedImage === index ? 'border-blue-600' : 'border-transparent hover:border-blue-300'
-                }`}
+              className={`relative rounded-xl overflow-hidden bg-gray-50 aspect-square cursor-pointer border-2 transition-all ${
+                selectedImage === index ? 'border-blue-600 ring-2 ring-blue-100' : 'border-transparent hover:border-blue-300'
+              }`}
             >
-              <img src={img} alt={`Thumbnail ${index}`} className="w-full h-full object-cover" />
+              <img src={img} alt={`Thumb ${index}`} className="w-full h-full object-cover" />
             </div>
           ))}
-          {/* Placeholder if there are more than 3 images */}
-          {images.length > 3 && (
-            <div className="rounded-lg overflow-hidden bg-gray-200 aspect-square cursor-pointer flex items-center justify-center text-slate-500 font-medium text-sm hover:bg-gray-300 transition-colors">
-              +{images.length - 3} more
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -83,253 +82,277 @@ const ImageGallery = ({ images, isFeatured }) => {
 };
 
 const ProductDescription = ({ description }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-6 mt-8 shadow-sm">
-    <h2 className="text-xl font-bold text-slate-900 mb-4">Description</h2>
-    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+  <div className="bg-white rounded-2xl border border-gray-100 p-8 mt-8 shadow-sm">
+    <h2 className="text-xl font-bold text-slate-900 mb-4 border-b border-gray-100 pb-4">Description</h2>
+    <p className="text-slate-600 leading-relaxed whitespace-pre-line text-sm md:text-base">
       {description}
     </p>
   </div>
 );
 
+// --- Sidebar Component ---
 const Sidebar = ({ data }) => {
-  // Safe encode for map url
-  const locationQuery = encodeURIComponent(data.location || "New York, USA");
+  const navigate = useNavigate();
   
+  // Safe encode for map url
+  const locationQuery = encodeURIComponent(data.location || "India");
+
+  const handleCall = () => {
+    if (data.seller.phone) {
+      window.location.href = `tel:${data.seller.phone}`;
+    } else {
+      alert("Seller has not provided a phone number.");
+    }
+  };
+
+  const handleChat = async () => {
+    const currentUser = JSON.parse(localStorage.getItem("user"));
+    const myId = currentUser?._id || currentUser?.id;
+
+    if (!currentUser) {
+       navigate("/login");
+       return;
+    }
+
+    if (!myId) {
+       alert("Session Error. Please Logout and Login again.");
+       return;
+    }
+
+    if (!data?.seller?.id) {
+       alert("Error: Cannot find Seller ID.");
+       return;
+    }
+
+    // Prevent chatting with yourself
+    if (myId === data.seller.id) {
+        alert("You cannot chat with yourself.");
+        return;
+    }
+
+    try {
+       // ✅ Using Centralized API
+       const res = await api.post("/chat/conversation", { 
+          senderId: myId, 
+          receiverId: data.seller.id 
+       });
+       
+       if (res.data._id) {
+          navigate(`/chat/${res.data._id}`);
+       } else {
+          navigate("/chat");
+       }
+       
+    } catch (err) {
+       console.error("Chat Creation Error", err);
+       alert("Could not start chat. Try again later.");
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      {/* 1. Product Price & Details Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+    <div className="space-y-6 sticky top-24">
+      
+      {/* 1. Price & Details */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex justify-between items-start mb-4">
-          <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-md">
+          <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
             {data.conditionTag}
           </span>
-          <span className="text-slate-500 text-sm flex items-center gap-1">
-            <span className="inline-block w-4 h-4 bg-gray-200 rounded-full"></span>
-            {data.postedDate}
+          <span className="text-slate-400 text-xs font-medium">
+            Posted {data.postedDate}
           </span>
         </div>
 
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
+        <h1 className="text-2xl font-bold text-slate-900 mb-2 leading-tight">
           {data.title}
         </h1>
 
-        <div className="flex justify-between items-center mb-6">
-          <span className="text-3xl font-bold text-blue-600">{data.price}</span>
-          <div className="flex items-center text-slate-500 text-sm">
-            <MapPin size={16} className="mr-1" />
-            {data.location}
-          </div>
+        <div className="flex justify-between items-end mb-6">
+          <span className="text-3xl font-extrabold text-slate-900 tracking-tight">{data.price}</span>
         </div>
 
-        {/* Details Grid */}
-        <div className="grid grid-cols-2 gap-y-4 text-sm border-t border-gray-100 pt-6">
+        <div className="space-y-3 pt-6 border-t border-gray-50">
           {Object.entries(data.details).map(([key, value]) => (
-            <div key={key}>
-              <dt className="text-slate-500 mb-1">{key}</dt>
-              <dd className="text-slate-900 font-semibold">{value || "N/A"}</dd>
+            <div key={key} className="flex justify-between items-center text-sm">
+              <span className="text-slate-500">{key}</span>
+              <span className="text-slate-900 font-semibold truncate max-w-[60%]">{value || "N/A"}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 2. Seller Information Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-bold text-slate-900">Seller Information</h2>
-          <button className="text-slate-400 hover:text-slate-600">
-            <MoreVertical size={20} />
-          </button>
-        </div>
-
+      {/* 2. Seller Info */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
         <div className="flex items-center gap-4 mb-6">
           <div className="relative">
             <img
               src={data.seller.image}
               alt={data.seller.name}
-              className="w-16 h-16 rounded-full object-cover border border-gray-200"
+              className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
             />
-            {data.seller.isOnline && (
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></span>
-            )}
+            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></span>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{data.seller.name}</h3>
-            {/* Conditional Rendering for Rating - only show if reviews exist */}
-            {data.seller.reviews > 0 ? (
-                <div className="flex items-center text-sm mt-1">
-                <Star size={16} className="text-yellow-400 fill-current mr-1" />
-                <span className="font-semibold mr-1">{data.seller.rating}</span>
-                <span className="text-slate-500">({data.seller.reviews} reviews)</span>
-                </div>
-            ) : (
-                <div className="flex items-center text-sm mt-1 text-slate-500">
-                    No reviews yet
-                </div>
-            )}
-            
-            <p className="text-slate-500 text-xs mt-1">Member since {data.seller.memberSince}</p>
+            <h3 className="text-base font-bold text-slate-900">{data.seller.name}</h3>
+            <p className="text-xs text-slate-500">Member since {data.seller.memberSince}</p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
-            <Phone size={20} />
-            Contact Seller
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={handleChat}
+            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
+          >
+            <MessageSquare size={18} />
+            Chat
           </button>
-          <button className="w-full bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors">
-            <MessageSquare size={20} />
-            Chat Now
+
+          <button
+            onClick={handleCall}
+            className="flex items-center justify-center gap-2 bg-white border-2 border-slate-100 hover:border-blue-100 hover:bg-blue-50 text-slate-700 font-bold py-3 rounded-xl transition-all"
+          >
+            <Phone size={18} />
+            Call
           </button>
         </div>
       </div>
 
-      {/* 3. Safety Tip Card */}
-      <div className="bg-blue-50 rounded-xl border border-blue-100 p-4 flex gap-4 shadow-sm">
-        <ShieldAlert size={28} className="text-blue-600 flex-shrink-0" />
-        <div>
-          <h3 className="text-sm font-bold text-slate-900 mb-1">Safety Tip</h3>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Avoid paying in advance. Meet in a safe, public place to inspect the item before buying.
-          </p>
-        </div>
-      </div>
-
-      {/* 4. Map Location Card (Dynamic Embed) */}
-      <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm h-56 relative group bg-gray-100">
-         {/* Live Google Maps Embed Iframe - No API Key required for basic embed */}
-         <iframe 
-            width="100%" 
-            height="100%" 
-            frameBorder="0" 
-            scrolling="no" 
-            marginHeight="0" 
-            marginWidth="0" 
-            title="Seller Location"
-            src={`https://maps.google.com/maps?q=${locationQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
-            className="w-full h-full opacity-90 group-hover:opacity-100 transition-opacity"
-         ></iframe>
-         
-         {/* Overlay Label */}
-        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2 font-medium text-xs text-slate-800 pointer-events-none">
-          <MapPin size={14} className="text-red-500" fill="currentColor" />
+      {/* 3. Location Map */}
+      <div className="rounded-2xl border border-gray-200 overflow-hidden h-48 relative group">
+        <iframe
+          width="100%"
+          height="100%"
+          frameBorder="0"
+          scrolling="no"
+          marginHeight="0"
+          marginWidth="0"
+          title="Location"
+          // ✅ FIXED MAP URL
+          src={`https://maps.google.com/maps?q=${locationQuery}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
+          className="w-full h-full opacity-80 group-hover:opacity-100 transition-opacity grayscale hover:grayscale-0"
+        ></iframe>
+        
+        <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-2 text-xs font-bold text-slate-800 pointer-events-none">
+          <MapPin size={14} className="text-red-500" />
           {data.location}
         </div>
       </div>
+
+      {/* 4. Safety Tip */}
+      <div className="bg-yellow-50 rounded-xl p-4 flex gap-3 border border-yellow-100">
+        <ShieldAlert size={20} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-yellow-800 leading-relaxed">
+          <strong>Safety Tip:</strong> Never transfer money in advance. Meet the seller in a safe, public location.
+        </p>
+      </div>
+
     </div>
   );
 };
 
 // --- Main Page Component ---
-
 const ProductPage = () => {
   const { id } = useParams();
-  const productId = id;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Scroll to top on load
   useEffect(() => {
-    // Fetch product from backend by ID
+    window.scrollTo(0, 0);
+  }, [id]);
+
+  useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/products/${productId}`);
-        const product = await response.json();
+        const response = await api.get(`/products/${id}`);
+        const product = response.data;
 
-        if (!response.ok) {
-          console.error(product.message);
-          setLoading(false);
-          return;
-        }
-
-        // Helper to format date
         const formatDate = (dateString) => {
-            if (!dateString) return "N/A";
-            const date = new Date(dateString);
-            return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long' }); // e.g., October 2023
+          if (!dateString) return "Recently";
+          return new Date(dateString).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
         };
 
-        // Determine Seller Image (Use real image, or generate one based on initials)
         const getSellerImage = (seller) => {
-            if (seller?.image) return seller.image;
-            if (seller?.profileImage) return seller.profileImage;
-            const name = seller?.name || "User";
-            return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+          if (seller?.profilePic) return seller.profilePic;
+          return `https://ui-avatars.com/api/?name=${encodeURIComponent(seller?.name || "User")}&background=random&color=fff`;
         };
 
-        // Transform backend data
         const formattedProduct = {
           id: product._id,
           title: product.title,
-          price: `$${product.price}`,
+          price: new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(product.price),
           location: product.location || "Unknown Location",
           postedDate: formatDate(product.createdAt),
           conditionTag: product.condition ? (product.condition.charAt(0).toUpperCase() + product.condition.slice(1)) : "Used",
-          isFeatured: false, 
-          details: {
-            Brand: product.brand || "Generic",
-            Model: product.title, // Or specific model field if you have it
-            Condition: product.condition || "N/A",
-            Category: product.category || "N/A"
-          },
-          description: product.description,
-          images: product.images && product.images.length > 0 
-            ? product.images.map(img => img.url) 
-            : ["https://via.placeholder.com/600x400?text=No+Image"], // Fallback image
+          isFeatured: false,
           
-          // REAL SELLER MAPPING
+          // ✅ BRAND LOGIC
+          details: {
+            Category: product.category?.charAt(0).toUpperCase() + product.category?.slice(1) || "N/A",
+            ...(product.brand ? { Brand: product.brand } : {}), // Shows "Brand" only if exists
+            Condition: product.condition || "N/A",
+          },
+          
+          description: product.description,
+          images: product.images && product.images.length > 0
+            ? product.images.map(img => img.url)
+            : [],
+          
           seller: {
-            id: product.seller?._id,
+            id: product.seller?._id, 
             name: product.seller?.name || "Verified Seller",
-            rating: product.seller?.rating || 0, // Assuming 0 if new seller
-            reviews: product.seller?.reviews || 0,
-            memberSince: formatDate(product.seller?.createdAt || new Date()),
-            isOnline: true, // You might need a socket logic for real 'online' status, true is fine for UI demo
-            image: getSellerImage(product.seller)
+            memberSince: formatDate(product.seller?.createdAt),
+            image: getSellerImage(product.seller),
+            phone: product.seller?.phone || ""
           }
         };
 
         setData(formattedProduct);
-        setLoading(false);
       } catch (error) {
         console.error("Error fetching product:", error);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchProduct();
-  }, [productId]);
+  }, [id]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
     </div>
   );
-  
+
   if (!data) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-slate-600">
-        <ShieldAlert size={48} className="text-red-400 mb-4" />
-        <p className="text-lg font-semibold">Product not found</p>
-        <a href="/" className="mt-4 text-blue-600 hover:underline">Go back home</a>
+      <AlertCircle size={48} className="text-gray-300 mb-4" />
+      <p className="text-lg font-semibold">Product not found</p>
+      <Link to="/" className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors">
+        Go Home
+      </Link>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans pb-12">
-      <Navbar />
+    <div className="min-h-screen bg-gray-50 font-sans pb-20">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Pass dynamic title to breadcrumbs */}
+        
         <Breadcrumbs title={data.title} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Images & Description */}
+          
+          {/* Left: Images & Desc */}
           <div className="lg:col-span-2">
             <ImageGallery images={data.images} isFeatured={data.isFeatured} />
             <ProductDescription description={data.description} />
           </div>
 
-          {/* Right Column - Details & Seller Sidebar */}
+          {/* Right: Sidebar */}
           <div className="lg:col-span-1">
             <Sidebar data={data} />
           </div>
+          
         </div>
       </main>
     </div>

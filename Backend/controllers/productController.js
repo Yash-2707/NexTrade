@@ -1,63 +1,52 @@
 const Product = require("../models/Product");
 const cloudinary = require("../config/cloudinary");
 
-/**
- * ✅ CREATE PRODUCT (SELLER ONLY)
- */
+// CREATE PRODUCT
 const createProduct = async (req, res) => {
-    console.log("BODY:", req.body);
-    console.log("FILES:", req.files);
-
     try {
         const {
             title,
             category,
+            brand,
             price,
             description,
             condition,
             location
         } = req.body;
 
-        // ❌ Validation for required fields
+        // 1. Validate required fields
         if (!title || !category || !price || !description || !condition || !location) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
-        // ✅ Robust price parsing
+        // 2. Validate Price
         const numericPrice = Number(price?.toString().trim());
         if (isNaN(numericPrice) || numericPrice <= 0) {
             return res.status(400).json({ message: "Price must be a valid number greater than 0" });
         }
 
-        // ✅ Validate condition enum
-        const allowedConditions = ["new", "used", "old"];
-        if (!allowedConditions.includes(condition)) {
-            return res.status(400).json({ message: `Condition must be one of: ${allowedConditions.join(", ")}` });
-        }
-
-        // ❌ Images required
+        // 3. Validate Images
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ message: "At least one image is required" });
         }
 
-        // ✅ Upload images to Cloudinary
-        const images = [];
-        for (const file of req.files) {
-            const result = await cloudinary.uploader.upload(file.path, {
-                folder: "products"
-            });
+        // 4. Upload Images (Parallel execution for speed)
+        const uploadPromises = req.files.map(file =>
+            cloudinary.uploader.upload(file.path, { folder: "products" })
+        );
+        const uploadResults = await Promise.all(uploadPromises);
 
-            images.push({
-                url: result.secure_url,
-                public_id: result.public_id
-            });
-        }
+        const images = uploadResults.map(result => ({
+            url: result.secure_url,
+            public_id: result.public_id
+        }));
 
-        // ✅ Create product
+        // 5. Save to Database
         const product = await Product.create({
             title,
             category,
-            price: numericPrice,  // ✅ Use numeric price
+            brand, // Saves brand if provided
+            price: numericPrice,
             description,
             condition,
             location,
@@ -66,78 +55,74 @@ const createProduct = async (req, res) => {
         });
 
         res.status(201).json(product);
+
+    } catch (error) {
+        console.error("Create Product Error:", error);
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+};
+
+// GET ALL PRODUCTS (With Filtering & Sorting)
+// ✅ GET ALL PRODUCTS (PUBLIC)
+const getAllProducts = async (req, res) => {
+    try {
+        const {
+            keyword,
+            category,
+            minPrice,
+            maxPrice,
+            location,
+            condition,
+            sort
+        } = req.query;
+
+        let query = {};
+
+        // 🔍 Search by title (Case-insensitive)
+        if (keyword) {
+            query.title = { $regex: keyword, $options: "i" };
+        }
+
+        // 📦 Category filter (✅ FIXED: Case-insensitive)
+        // This allows "electronics" to find "Electronics", "ELECTRONICS", etc.
+        if (category) {
+            query.category = { $regex: category, $options: "i" };
+        }
+
+        // 📍 Location filter (Case-insensitive)
+        if (location) {
+            query.location = { $regex: location, $options: "i" };
+        }
+
+        // ⚙ Condition filter
+        if (condition) {
+            query.condition = condition;
+        }
+
+        // 💰 Price filter
+        if (minPrice || maxPrice) {
+            query.price = {};
+            if (minPrice) query.price.$gte = Number(minPrice);
+            if (maxPrice) query.price.$lte = Number(maxPrice);
+        }
+
+        // 🔃 Sorting
+        let sortOption = { createdAt: -1 };
+        if (sort === "price_low") sortOption = { price: 1 };
+        if (sort === "price_high") sortOption = { price: -1 };
+
+        const products = await Product.find(query)
+            .populate("seller", "name email role")
+            .sort(sortOption);
+
+        res.json(products);
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-/**
- * ✅ GET ALL PRODUCTS (PUBLIC)
- */
-const getAllProducts = async (req, res) => {
-  try {
-    const {
-      keyword,
-      category,
-      minPrice,
-      maxPrice,
-      location,
-      condition,
-      sort
-    } = req.query;
-
-    let query = {};
-
-    // 🔍 Search by title
-    if (keyword) {
-      query.title = { $regex: keyword, $options: "i" };
-    }
-
-    // 📦 Category filter
-    if (category) {
-      query.category = category;
-    }
-
-    // 📍 Location filter
-    if (location) {
-      query.location = { $regex: location, $options: "i" };
-    }
-
-    // ⚙ Condition filter
-    if (condition) {
-      query.condition = condition;
-    }
-
-    // 💰 Price filter
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
-
-    // 🔃 Sorting
-    let sortOption = { createdAt: -1 };
-    if (sort === "price_low") sortOption = { price: 1 };
-    if (sort === "price_high") sortOption = { price: -1 };
-
-    const products = await Product.find(query)
-      .populate("seller", "name email role")
-      .sort(sortOption);
-
-    res.json(products);
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-/**
- * ✅ UPDATE PRODUCT (SELLER ONLY – OWNER)
- */
-/**
- * ✅ UPDATE PRODUCT (SELLER ONLY – OWNER)
- */
+// UPDATE PRODUCT
 const updateProduct = async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -146,77 +131,70 @@ const updateProduct = async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
+        // Authorization Check
         if (product.seller.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: "Not authorized" });
+            return res.status(403).json({ message: "Not authorized to edit this product" });
         }
 
         const {
             title,
             category,
+            brand,
             price,
             description,
             condition,
             location,
-            existingImages // We expect this from frontend now
+            existingImages
         } = req.body;
 
-        // Update Text Fields
+        // Update Fields
         if (title) product.title = title;
         if (category) product.category = category;
+        if (brand) product.brand = brand;
         if (description) product.description = description;
         if (location) product.location = location;
         if (condition) product.condition = condition;
         if (price) product.price = Number(price);
 
-        // 🔥 HANDLE IMAGES (Delete removed ones + Add new ones)
-        
-        // 1. Handle Existing Images (Determine what to keep/delete)
+        // Image Management
+        // 1. Remove deleted images from Cloudinary
         if (existingImages) {
-            const keepImages = JSON.parse(existingImages); // Frontend sends as JSON string
-
-            // Find images that are in DB but NOT in keepImages list -> Delete them
+            const keepImages = JSON.parse(existingImages);
             const imagesToDelete = product.images.filter(
                 (img) => !keepImages.some((keep) => keep.public_id === img.public_id)
             );
 
-            // Delete from Cloudinary
-            for (const img of imagesToDelete) {
-                await cloudinary.uploader.destroy(img.public_id);
-            }
+            // Parallel delete
+            await Promise.all(imagesToDelete.map(img => cloudinary.uploader.destroy(img.public_id)));
 
-            // Update product images to only contain the ones we kept
             product.images = keepImages;
         }
 
-        // 2. Handle NEW Images (Upload and Append)
+        // 2. Upload new images (Parallel)
         if (req.files && req.files.length > 0) {
-            for (const file of req.files) {
-                const result = await cloudinary.uploader.upload(file.path, {
-                    folder: "products"
-                });
+            const uploadPromises = req.files.map(file =>
+                cloudinary.uploader.upload(file.path, { folder: "products" })
+            );
+            const uploadResults = await Promise.all(uploadPromises);
 
-                product.images.push({
-                    url: result.secure_url,
-                    public_id: result.public_id
-                });
-            }
+            const newImages = uploadResults.map(result => ({
+                url: result.secure_url,
+                public_id: result.public_id
+            }));
+
+            product.images.push(...newImages);
         }
 
         await product.save();
-        res.json(product);
+        res.status(200).json(product);
 
     } catch (error) {
-        console.error("Update Error:", error);
-        res.status(500).json({ message: error.message });
+        console.error("Update Product Error:", error);
+        res.status(500).json({ message: "Failed to update product" });
     }
 };
 
-
-
-
-/**
- * ✅ DELETE PRODUCT (SELLER ONLY – OWNER)
- */
+// DELETE PRODUCT
 const deleteProduct = async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -225,51 +203,50 @@ const deleteProduct = async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
-        // ❌ Only owner can delete
         if (product.seller.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: "Not authorized" });
         }
 
-        // 🗑 Delete images from Cloudinary
-        for (const img of product.images) {
-            await cloudinary.uploader.destroy(img.public_id);
+        // Delete images from Cloudinary in parallel
+        if (product.images && product.images.length > 0) {
+            await Promise.all(product.images.map(img => cloudinary.uploader.destroy(img.public_id)));
         }
 
         await product.deleteOne();
 
-        res.json({ message: "Product deleted successfully" });
+        res.status(200).json({ message: "Product deleted successfully" });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Delete Product Error:", error);
+        res.status(500).json({ message: "Failed to delete product" });
     }
 };
 
+// GET PRODUCT BY ID
 const getProductById = async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id);
+        const product = await Product.findById(req.params.id)
+            .populate("seller", "name profilePic createdAt email phone");
+
         if (!product) {
             return res.status(404).json({ message: "Product not found" });
         }
-        res.json(product);
+        res.status(200).json(product);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: "Error fetching product details" });
     }
 };
 
-/**
- * ✅ GET LOGGED-IN SELLER PRODUCTS (SELLER ONLY)
- */
+// GET SELLER PRODUCTS
 const getSellerProducts = async (req, res) => {
     try {
-        const products = await Product.find({
-            seller: req.user._id
-        }).sort({ createdAt: -1 });
+        const products = await Product.find({ seller: req.user._id })
+            .sort({ createdAt: -1 });
 
-        res.json(products);
+        res.status(200).json(products);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: "Error fetching seller products" });
     }
 };
-
 
 module.exports = {
     createProduct,
