@@ -79,10 +79,3 @@ NexTrade aims to deliver a **fast, secure, and user-friendly marketplace** where
 - C2C Marketplace Platform  
 
 ---
-
-## 📄 License
-This project is created for **learning, demonstration, and portfolio purposes**.
-
----
-
-### ⭐ NexTrade — Trade Smart. Trade Fast. Trade Better.
